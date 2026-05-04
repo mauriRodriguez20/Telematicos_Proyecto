@@ -74,9 +74,9 @@ Todos deben aparecer con estado `running`.
 
 ### 4. Probar el balanceador en el navegador
 
-Abre: **http://localhost:8080**
+Abrir : **http://localhost:8080**
 
-Recarga varias veces con `F5` y verás cómo rota entre los backends:
+Recargar varias veces con `F5` y se verá cómo rota entre los backends:
 ```json
 { "server": "backend-1", "message": "Hola desde backend-1!" }
 { "server": "backend-2", "message": "Hola desde backend-2!" }
@@ -141,7 +141,7 @@ docker compose --profile testing run --rm artillery
 
 El escenario en `artillery/load-test.yml` tiene 3 fases:
 1. **Ramp-up** (30s) — sube de 5 a 50 usuarios gradualmente
-2. **Carga sostenida** (60s) — 100 usuarios concurrentes
+2. **Carga sostenida** (60s) — 1000 usuarios concurrentes
 3. **Enfriamiento** (20s) — baja la carga
 
 Al finalizar muestra un reporte con latencia media, p95, p99 y requests por segundo.
