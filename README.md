@@ -99,7 +99,7 @@ Invoke-WebRequest -Uri "http://localhost:8080/nginx_status" -UseBasicParsing | S
 
 ## Cambiar el algoritmo de balanceo
 
-Abre `nginx/nginx.conf` y cambia esta línea:
+Abrir `nginx/nginx.conf` y cambiar  esta línea:
 
 ```nginx
 # Opciones disponibles:
@@ -108,7 +108,7 @@ proxy_pass http://backend_least_conn;   # Menor carga
 proxy_pass http://backend_ip_hash;      # Persistencia de sesión
 ```
 
-Luego reinicia solo NGINX (sin bajar los backends):
+Luego hay que reiniciar solo NGINX (sin bajar los backends):
 
 ```bash
 docker restart load-balancer
