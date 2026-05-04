@@ -1,6 +1,6 @@
 services:
 
-  # ─── Balanceador de carga ───────────────────────────────────────────────────
+  # ─── Balanceador de carga ─────────────────────────────────────────────────
   nginx:
     image: nginx:alpine
     container_name: load-balancer
@@ -16,7 +16,7 @@ services:
       - web-network
     restart: unless-stopped
 
-  # ─── Backends ───────────────────────────────────────────────────────────────
+  # ─── Backends ─────────────────────────────────────────────────────────────
   backend1:
     build: ./backends/app1
     container_name: backend-1
@@ -47,7 +47,35 @@ services:
       - web-network
     restart: unless-stopped
 
-  # ─── Pruebas de carga ───────────────────────────────────────────────────────
+  # ─── Métricas: nginx-prometheus-exporter ──────────────────────────────────
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nginx-exporter
+    command:
+      - --nginx.scrape-uri=http://nginx:80/nginx_status
+    ports:
+      - "9113:9113"
+    depends_on:
+      - nginx
+    networks:
+      - web-network
+    restart: unless-stopped
+
+  # ─── Métricas: Prometheus ─────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - nginx-exporter
+    networks:
+      - web-network
+    restart: unless-stopped
+
+  # ─── Pruebas de carga: Artillery ──────────────────────────────────────────
   artillery:
     image: artilleryio/artillery:latest
     container_name: artillery-runner

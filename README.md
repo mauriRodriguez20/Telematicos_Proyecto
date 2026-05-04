@@ -74,9 +74,9 @@ Todos deben aparecer con estado `running`.
 
 ### 4. Probar el balanceador en el navegador
 
-Abrir: **http://localhost:8080**
+Abre: **http://localhost:8080**
 
-Recargar varias veces con `F5` y se verá cómo rota entre los backends:
+Recarga varias veces con `F5` y verás cómo rota entre los backends:
 ```json
 { "server": "backend-1", "message": "Hola desde backend-1!" }
 { "server": "backend-2", "message": "Hola desde backend-2!" }
@@ -99,7 +99,7 @@ Invoke-WebRequest -Uri "http://localhost:8080/nginx_status" -UseBasicParsing | S
 
 ## Cambiar el algoritmo de balanceo
 
-Abrir `nginx/nginx.conf` y cambiar esta línea:
+Abre `nginx/nginx.conf` y cambia esta línea:
 
 ```nginx
 # Opciones disponibles:
@@ -108,7 +108,7 @@ proxy_pass http://backend_least_conn;   # Menor carga
 proxy_pass http://backend_ip_hash;      # Persistencia de sesión
 ```
 
-Luego reiniciar solo NGINX (sin bajar los backends):
+Luego reinicia solo NGINX (sin bajar los backends):
 
 ```bash
 docker restart load-balancer
@@ -141,7 +141,7 @@ docker compose --profile testing run --rm artillery
 
 El escenario en `artillery/load-test.yml` tiene 3 fases:
 1. **Ramp-up** (30s) — sube de 5 a 50 usuarios gradualmente
-2. **Carga sostenida** (60s) — 1000 usuarios concurrentes
+2. **Carga sostenida** (60s) — 100 usuarios concurrentes
 3. **Enfriamiento** (20s) — baja la carga
 
 Al finalizar muestra un reporte con latencia media, p95, p99 y requests por segundo.
@@ -186,12 +186,12 @@ Telematicos_Proyecto/
 
 | Algoritmo | Comportamiento observado |
 |---|---|
-| `round_robin` | Rota en orden exacto: 1 → 2 → 3 → 1 → 2 → 3 |
+| `round_robin` | Rota en orden exacto: 1→2→3→1→2→3 |
 | `least_conn` | Similar a round robin en carga baja (normal) |
 | `ip_hash` | Siempre el mismo backend por IP (persistencia de sesión) |
 
 ### Prueba de resiliencia
-Al detener `backend-2`, el servicio continua sin interrupciones usando solo `backend-1` y `backend-3`. Al reiniciarlo, NGINX lo reincorpora automáticamente.
+Al detener `backend-2`, el servicio continuó sin interrupciones usando solo `backend-1` y `backend-3`. Al reiniciarlo, NGINX lo reincorporó automáticamente.
 
 ### Prueba de carga (round_robin)
 | Métrica | Valor |
@@ -204,13 +204,13 @@ Al detener `backend-2`, el servicio continua sin interrupciones usando solo `bac
 | p99 | 804.5 ms |
 
 ---
- 
+
 ## Nota sobre pruebas de carga con 1000 usuarios en Windows
- 
+
 Durante las pruebas de carga con 1000 usuarios concurrentes se presentaron errores de tipo `EADDRNOTAVAIL`. Estos errores **no son un fallo del balanceador**, sino una limitación del sistema operativo Windows al agotar el rango de puertos efímeros disponibles cuando se generan miles de conexiones simultáneas desde una sola máquina.
- 
+
 A pesar de esto, los resultados obtenidos demuestran el correcto funcionamiento del sistema:
- 
+
 | Métrica | Resultado |
 |---|---|
 | Peticiones exitosas (HTTP 200) | 38,277 |
@@ -220,5 +220,76 @@ A pesar de esto, los resultados obtenidos demuestran el correcto funcionamiento 
 | p95 | 347.3 ms |
 | p99 | 889.1 ms |
 | Usuarios completados | 38,277 |
- 
+
 En un entorno Linux o en la nube (donde se ejecutaría este sistema en producción), esta limitación no existe y la prueba de 1000 usuarios correría sin errores.
+
+---
+
+## Métricas con Prometheus
+
+Al levantar la infraestructura con `docker compose up --build -d`, también se levantan automáticamente dos contenedores adicionales de métricas:
+
+- **nginx-exporter** — expone las métricas de NGINX en formato Prometheus
+- **prometheus** — recolecta y almacena las métricas para consultarlas
+
+### URLs disponibles
+
+| Servicio | URL | Descripción |
+|---|---|---|
+| Balanceador | http://localhost:8080 | Tráfico web balanceado |
+| NGINX status | http://localhost:8080/nginx_status | Métricas básicas de NGINX |
+| Métricas raw | http://localhost:9113/metrics | Métricas en formato Prometheus |
+| Prometheus | http://localhost:9090 | Dashboard de consulta de métricas |
+
+### Cómo usar Prometheus
+
+1. Abrir **http://localhost:9090** en el navegador
+2. En el campo de búsqueda escribir alguna de estas consultas:
+
+```
+# Conexiones activas en NGINX
+nginx_connections_active
+
+# Total de peticiones manejadas
+nginx_connections_handled_total
+
+# Peticiones por segundo
+rate(nginx_http_requests_total[1m])
+```
+
+3. Hacer clic en **Execute** y luego en la pestaña **Graph** para ver la evolución en el tiempo
+
+### Estructura actualizada del proyecto
+
+```
+Telematicos_Proyecto/
+├── docker-compose.yml
+├── docker-compose.override.yml   # Recarga en caliente para desarrollo
+├── .env
+├── nginx/
+│   └── nginx.conf
+├── backends/
+│   ├── app1/ → app3/
+├── artillery/
+│   └── load-test.yml
+└── prometheus/
+    └── prometheus.yml            # Configuración de Prometheus
+```
+
+---
+
+## Entorno de desarrollo — recarga en caliente
+
+El archivo `docker-compose.override.yml` se aplica automáticamente junto con el `docker-compose.yml`. Esto permite modificar el `nginx.conf` o cualquier `index.js` de los backends y ver los cambios sin reconstruir las imágenes.
+
+Para recargar NGINX después de editar `nginx.conf`:
+
+```bash
+docker restart load-balancer
+```
+
+Para recargar un backend después de editar su `index.js`:
+
+```bash
+docker restart backend-1   # o backend-2 / backend-3
+```
