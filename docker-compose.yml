@@ -8,8 +8,6 @@ services:
       - "${PUBLIC_PORT:-8080}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    environment:
-      - BALANCING_POLICY=${BALANCING_POLICY:-round_robin}
     depends_on:
       - backend1
       - backend2
@@ -59,9 +57,14 @@ services:
       - web-network
     profiles:
       - testing
-    command: ["run", "/scripts/load-test.yml"]
+    command: >
+      run --output /scripts/report.json /scripts/load-test.yml
     depends_on:
       - nginx
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
 networks:
   web-network:
