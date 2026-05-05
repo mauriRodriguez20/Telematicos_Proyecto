@@ -86,7 +86,7 @@ Recargar varias veces con `F5` y se verá cómo rota entre los backends:
 ### 5. Probar desde la terminal (9 peticiones seguidas)
 
 ```powershell
-1..9 | ForEach-Object { Invoke-WebRequest -Uri "http://localhost:8080" -UseBasicParsing | Select-Object -ExpandProperty Content }
+1..9 | ForEach-Object { (Invoke-WebRequest -Uri "http://localhost:8080/info" -UseBasicParsing).Content }
 ```
 
 ### 6. Ver métricas de NGINX en tiempo real
@@ -113,6 +113,11 @@ Luego hay que reiniciar solo NGINX (sin bajar los backends):
 ```bash
 docker restart load-balancer
 ```
+
+### Probar nuevamente desde la terminal (9 peticiones seguidas)
+
+```powershell
+1..9 | ForEach-Object { (Invoke-WebRequest -Uri "http://localhost:8080/info" -UseBasicParsing).Content }
 
 ---
 

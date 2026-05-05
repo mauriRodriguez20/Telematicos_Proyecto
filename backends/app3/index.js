@@ -1,27 +1,37 @@
 const http = require('http');
 const os = require('os');
- 
+
 const SERVER_ID = process.env.SERVER_ID || 'backend-1';
 const PORT = process.env.PORT || 3000;
- 
+
 const COLORS = {
   'backend-1': { primary: '#2563eb', light: '#eff6ff' },
   'backend-2': { primary: '#16a34a', light: '#f0fdf4' },
   'backend-3': { primary: '#9333ea', light: '#faf5ff' },
 };
- 
+
 const color = COLORS[SERVER_ID] || { primary: '#64748b', light: '#f8fafc' };
- 
+
 const server = http.createServer((req, res) => {
+
+  // Ruta /info — devuelve solo JSON con el nombre del servidor
+  if (req.url === '/info') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ server: SERVER_ID, status: 'ok' }));
+    return;
+  }
+
+  // Ruta /health — para health checks internos
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', server: SERVER_ID }));
     return;
   }
- 
+
+  // Ruta principal — devuelve HTML visual
   const timestamp = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
   const num = SERVER_ID.split('-')[1];
- 
+
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -123,9 +133,9 @@ const server = http.createServer((req, res) => {
   </div>
 </body>
 </html>`;
- 
+
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
 });
- 
+
 server.listen(PORT, () => console.log(`${SERVER_ID} corriendo en puerto ${PORT}`));

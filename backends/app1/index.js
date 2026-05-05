@@ -13,12 +13,22 @@ const COLORS = {
 const color = COLORS[SERVER_ID] || { primary: '#64748b', light: '#f8fafc' };
 
 const server = http.createServer((req, res) => {
+
+  // Ruta /info — devuelve solo JSON con el nombre del servidor
+  if (req.url === '/info') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ server: SERVER_ID, status: 'ok' }));
+    return;
+  }
+
+  // Ruta /health — para health checks internos
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', server: SERVER_ID }));
     return;
   }
 
+  // Ruta principal — devuelve HTML visual
   const timestamp = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
   const num = SERVER_ID.split('-')[1];
 
