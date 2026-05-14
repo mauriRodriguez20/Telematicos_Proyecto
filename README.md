@@ -1,300 +1,262 @@
-# Proyecto Final — Balanceador de Carga Web con NGINX
-**Servicios Telemáticos | Lista 1 | 2026**  
-**Grupo:** Lista 1  
-**Herramientas:** NGINX, Node.js, Docker, Docker Compose, Artillery
+# Inventario de Productos Tecnologicos
 
----
+Proyecto final de Servicios Telematicos. La aplicacion permite gestionar un inventario de productos tecnologicos con un frontend web, tres backends Node.js balanceados por NGINX y una base de datos MySQL.
 
-## ¿De qué trata este proyecto?
+## Que hace la aplicacion
 
-Implementamos un **balanceador de carga** usando NGINX como proxy inverso. En lugar de que todos los usuarios lleguen a un solo servidor web, NGINX distribuye el tráfico entre 3 backends (servidores Node.js). Esto mejora el rendimiento, evita que un solo servidor se sature y permite que el sistema siga funcionando aunque uno de los servidores falle.
+- Lista todos los productos registrados.
+- Busca productos por nombre o descripcion.
+- Filtra productos por categoria.
+- Crea nuevos productos.
+- Edita productos existentes.
+- Elimina productos.
+- Muestra el total de productos encontrados.
+- Muestra el total general de unidades en inventario.
 
-Se implementaron y compararon 3 algoritmos de balanceo:
-- **Round Robin** — distribuye las peticiones en orden rotativo entre los backends
-- **Least Conn** — envía cada petición al backend con menos conexiones activas
-- **IP Hash** — el mismo usuario siempre llega al mismo backend (útil para sesiones)
+Categorias disponibles:
 
----
+- Computadoras
+- Smartphones
+- Tablets
+- Audio
+- Accesorios
+- Otros
 
 ## Arquitectura
 
-```
-         Cliente (navegador / Artillery)
-                      │
-                      ▼
-         ┌─────────────────────┐
-         │   NGINX :8080       │  ← Balanceador de carga
-         │   (load-balancer)   │
-         └──────┬──────┬───────┘
-                │      │      │
-          ┌─────▼─┐ ┌──▼───┐ ┌▼──────┐
-          │back-1 │ │back-2│ │back-3 │  ← Servidores Node.js
-          │:3000  │ │:3000 │ │:3000  │
-          └───────┘ └──────┘ └───────┘
-
-       Red interna Docker: balanceo-network
-       (los backends NO son accesibles desde fuera)
+```text
+Cliente web
+   |
+   v
+NGINX :8080
+   |-- sirve frontend estatico desde /frontend
+   |-- balancea /api/productos entre 3 backends
+          |
+          |-- backend-1 Node.js :3000
+          |-- backend-2 Node.js :3000
+          |-- backend-3 Node.js :3000
+                  |
+                  v
+              MySQL :3306
 ```
 
----
+NGINX conserva tres algoritmos definidos:
 
-## Requisitos previos
+- `backend_round_robin`: reparte las peticiones en orden entre los tres backends.
+- `backend_least_conn`: envia al backend con menos conexiones activas.
+- `backend_ip_hash`: mantiene afinidad por IP.
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado y **abierto**
-- Git instalado
+El algoritmo activo esta en `nginx/nginx.conf`:
 
----
+```nginx
+proxy_pass http://backend_round_robin;
+```
 
-## Cómo correr el proyecto
+## Puertos
 
-### 1. Clonar el repositorio
+| Servicio | Puerto host | Descripcion |
+|---|---:|---|
+| NGINX / Frontend | 8080 | Aplicacion web y proxy de API |
+| MySQL | 3307 | Base de datos publicada en el host |
+| nginx-exporter | 9113 | Metricas NGINX para Prometheus |
+| Prometheus | 9090 | Panel de metricas |
+| Backends | interno 3000 | Solo accesibles dentro de Docker |
+
+## Variables de entorno
+
+Usa `.env.example` como referencia:
+
+```env
+PUBLIC_PORT=8080
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=inventario_productos
+DB_PORT=3306
+MYSQL_PUBLIC_PORT=3307
+MYSQL_ROOT_PASSWORD=
+PORT=3000
+```
+
+En Docker, los backends usan `DB_HOST=mysql` y `DB_PORT=3306` porque se conectan al servicio MySQL por la red interna de Compose. En el host se publica como `3307` para evitar conflictos con instalaciones locales de MySQL o XAMPP.
+
+## Base de datos
+
+El archivo `database/init.sql` crea la tabla:
+
+```sql
+CREATE TABLE productos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(150) NOT NULL,
+  categoria VARCHAR(100) NOT NULL,
+  precio DECIMAL(10,2) NOT NULL,
+  stock INT NOT NULL,
+  descripcion TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+Tambien inserta datos iniciales:
+
+- MacBook Pro M3
+- iPhone 15 Pro
+- iPad Air
+- AirPods Pro
+
+## Backend
+
+La logica compartida de la API esta en `backends/shared`:
+
+```text
+backends/shared/
+  config/database.js          Conexion pool a MySQL
+  controllers/productController.js
+  models/productModel.js
+  routes/productRoutes.js
+  utils/http.js
+  utils/validation.js
+  server.js                   Servidor HTTP principal
+```
+
+Los tres servicios `backend1`, `backend2` y `backend3` construyen esa misma API. Se diferencian por la variable `SERVER_ID`, lo cual permite seguir demostrando balanceo de carga.
+
+### Rutas REST
+
+| Metodo | Ruta | Descripcion |
+|---|---|---|
+| GET | `/productos` | Lista productos |
+| GET | `/productos/:id` | Obtiene un producto por id |
+| GET | `/productos?categoria=Computadoras` | Filtra por categoria |
+| GET | `/productos?search=macbook` | Busca por nombre o descripcion |
+| POST | `/productos` | Crea un producto |
+| PUT | `/productos/:id` | Actualiza un producto |
+| DELETE | `/productos/:id` | Elimina un producto |
+
+Desde el navegador se consume por NGINX usando el prefijo `/api`:
+
+```text
+/api/productos
+/api/productos/1
+```
+
+NGINX remueve el prefijo `/api` antes de enviar la peticion al backend.
+
+## Frontend
+
+El frontend esta en `frontend/index.html`. Es una aplicacion estatica con HTML, CSS y JavaScript.
+
+Funciones principales:
+
+- Carga inicial con `GET /api/productos`.
+- Busqueda con `GET /api/productos?search=texto`.
+- Filtro con `GET /api/productos?categoria=Computadoras`.
+- Creacion con `POST /api/productos`.
+- Edicion con `PUT /api/productos/:id`.
+- Eliminacion con `DELETE /api/productos/:id`.
+- Validaciones de nombre, categoria, precio y stock.
+- Contadores actualizados despues de cada accion.
+
+## Como ejecutar el proyecto completo
+
+1. Copiar variables de ejemplo si es necesario:
 
 ```bash
-git clone https://github.com/mauriRodriguez20/Telematicos_Proyecto.git
-cd Telematicos_Proyecto
+cp .env.example .env
 ```
 
-### 2. Levantar toda la infraestructura
+En Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+2. Levantar todo con Docker:
 
 ```bash
 docker compose up --build -d
 ```
 
-Esto construye las imágenes y levanta 4 contenedores:
-- `load-balancer` → NGINX
-- `backend-1`, `backend-2`, `backend-3` → servidores Node.js
-
-### 3. Verificar que todo está corriendo
+3. Verificar contenedores:
 
 ```bash
 docker compose ps
 ```
 
-Todos deben aparecer con estado `running`.
+4. Abrir la aplicacion:
 
-### 4. Probar el balanceador en el navegador
-
-Abrir : **http://localhost:8080**
-
-Recargar varias veces con `F5` y se verá cómo rota entre los backends:
-```json
-{ "server": "backend-1", "message": "Hola desde backend-1!" }
-{ "server": "backend-2", "message": "Hola desde backend-2!" }
-{ "server": "backend-3", "message": "Hola desde backend-3!" }
+```text
+http://localhost:8080
 ```
 
-### 5. Probar desde la terminal (9 peticiones seguidas)
+5. Probar API directamente:
 
 ```powershell
-1..9 | ForEach-Object { (Invoke-WebRequest -Uri "http://localhost:8080/info" -UseBasicParsing).Content }
+Invoke-WebRequest -Uri "http://localhost:8080/api/productos" -UseBasicParsing
 ```
 
-### 6. Ver métricas de NGINX en tiempo real
-
-```powershell
-Invoke-WebRequest -Uri "http://localhost:8080/nginx_status" -UseBasicParsing | Select-Object -ExpandProperty Content
-```
-
----
-
-## Cambiar el algoritmo de balanceo
-
-Abrir `nginx/nginx.conf` y cambiar  esta línea:
-
-```nginx
-# Opciones disponibles:
-proxy_pass http://backend_round_robin;   # Por defecto
-proxy_pass http://backend_least_conn;   # Menor carga
-proxy_pass http://backend_ip_hash;      # Persistencia de sesión
-```
-
-Luego hay que reiniciar solo NGINX (sin bajar los backends):
-
-```bash
-docker restart load-balancer
-```
-
-### Probar nuevamente desde la terminal (9 peticiones seguidas)
-
-```powershell
-1..9 | ForEach-Object { (Invoke-WebRequest -Uri "http://localhost:8080/info" -UseBasicParsing).Content }
-
----
-
-## Prueba de resiliencia — bajar un backend en vivo
-
-```powershell
-# 1. Bajar backend-2 mientras el servicio está corriendo
-docker stop backend-2
-
-# 2. Verificar que el servicio sigue respondiendo (solo con backend-1 y backend-3)
-1..6 | ForEach-Object { Invoke-WebRequest -Uri "http://localhost:8080" -UseBasicParsing | Select-Object -ExpandProperty Content }
-
-# 3. Volver a levantar backend-2
-docker start backend-2
-```
-
-**Resultado esperado:** El servicio nunca se interrumpe. NGINX detecta el fallo y redirige el tráfico automáticamente.
-
----
-
-## Pruebas de carga con Artillery
-
-```bash
-docker compose --profile testing run --rm artillery
-```
-
-El escenario en `artillery/load-test.yml` tiene 3 fases:
-1. **Ramp-up** (30s) — sube de 5 a 50 usuarios gradualmente
-2. **Carga sostenida** (60s) — 1000 usuarios concurrentes
-3. **Enfriamiento** (20s) — baja la carga
-
-Al finalizar muestra un reporte con latencia media, p95, p99 y requests por segundo.
-
----
-
-## Apagar todo
+6. Apagar todo:
 
 ```bash
 docker compose down
 ```
 
----
+7. Apagar y borrar datos de MySQL para reiniciar la base:
 
-## Estructura del proyecto
-
-```
-Telematicos_Proyecto/
-├── docker-compose.yml        # Orquestación: NGINX + 3 backends + Artillery
-├── .env                      # Variables de entorno (puerto público)
-├── nginx/
-│   └── nginx.conf            # Configuración NGINX con los 3 algoritmos
-├── backends/
-│   ├── app1/
-│   │   ├── index.js          # Servidor Node.js — backend-1
-│   │   └── Dockerfile
-│   ├── app2/
-│   │   ├── index.js          # Servidor Node.js — backend-2
-│   │   └── Dockerfile
-│   └── app3/
-│       ├── index.js          # Servidor Node.js — backend-3
-│       └── Dockerfile
-└── artillery/
-    └── load-test.yml         # Escenario de prueba de carga
+```bash
+docker compose down -v
 ```
 
----
+## Como probar el CRUD
 
-## Resultados obtenidos
+1. Abre `http://localhost:8080`.
+2. Verifica que aparecen los cuatro productos iniciales.
+3. Escribe `macbook` en el buscador.
+4. Selecciona una categoria, por ejemplo `Computadoras`.
+5. Crea un producto desde `Nuevo Producto`.
+6. Edita el producto con el icono de lapiz.
+7. Elimina el producto con el icono de papelera.
+8. Confirma que los contadores cambian automaticamente.
 
-### Algoritmos de balanceo
+## Pruebas de carga
 
-| Algoritmo | Comportamiento observado |
-|---|---|
-| `round_robin` | Rota en orden exacto: 1→2→3→1→2→3 |
-| `least_conn` | Similar a round robin en carga baja (normal) |
-| `ip_hash` | Siempre el mismo backend por IP (persistencia de sesión) |
+Artillery consulta la API balanceada:
 
-### Prueba de resiliencia
-Al detener `backend-2`, el servicio continuó sin interrupciones usando solo `backend-1` y `backend-3`. Al reiniciarlo, NGINX lo reincorporó automáticamente.
-
-### Prueba de carga (round_robin)
-| Métrica | Valor |
-|---|---|
-| Requests exitosos (200) | 45,058 |
-| Request rate | 164 req/seg |
-| Latencia media | 47.9 ms |
-| Latencia mediana | 7.9 ms |
-| p95 | 144 ms |
-| p99 | 804.5 ms |
-
----
-
-## Nota sobre pruebas de carga con 1000 usuarios en Windows
-
-Durante las pruebas de carga con 1000 usuarios concurrentes se presentaron errores de tipo `EADDRNOTAVAIL`. Estos errores **no son un fallo del balanceador**, sino una limitación del sistema operativo Windows al agotar el rango de puertos efímeros disponibles cuando se generan miles de conexiones simultáneas desde una sola máquina.
-
-A pesar de esto, los resultados obtenidos demuestran el correcto funcionamiento del sistema:
-
-| Métrica | Resultado |
-|---|---|
-| Peticiones exitosas (HTTP 200) | 38,277 |
-| Request rate | 271 req/seg |
-| Latencia media | 51 ms |
-| Latencia mediana | 7.9 ms |
-| p95 | 347.3 ms |
-| p99 | 889.1 ms |
-| Usuarios completados | 38,277 |
-
-En un entorno Linux o en la nube (donde se ejecutaría este sistema en producción), esta limitación no existe y la prueba de 1000 usuarios correría sin errores.
-
----
-
-## Métricas con Prometheus
-
-Al levantar la infraestructura con `docker compose up --build -d`, también se levantan automáticamente dos contenedores adicionales de métricas:
-
-- **nginx-exporter** — expone las métricas de NGINX en formato Prometheus
-- **prometheus** — recolecta y almacena las métricas para consultarlas
-
-### URLs disponibles
-
-| Servicio | URL | Descripción |
-|---|---|---|
-| Balanceador | http://localhost:8080 | Tráfico web balanceado |
-| NGINX status | http://localhost:8080/nginx_status | Métricas básicas de NGINX |
-| Métricas raw | http://localhost:9113/metrics | Métricas en formato Prometheus |
-| Prometheus | http://localhost:9090 | Dashboard de consulta de métricas |
-
-### Cómo usar Prometheus
-
-1. Abrir **http://localhost:9090** en el navegador
-2. En el campo de búsqueda escribir alguna de estas consultas:
-
+```bash
+docker compose --profile testing run --rm artillery
 ```
-# Conexiones activas en NGINX
+
+El escenario esta en `artillery/load-test.yml` y apunta a:
+
+```text
+http://nginx:80/api/productos
+```
+
+## Metricas
+
+Prometheus queda disponible en:
+
+```text
+http://localhost:9090
+```
+
+Consultas utiles:
+
+```promql
 nginx_connections_active
-
-# Total de peticiones manejadas
 nginx_connections_handled_total
-
-# Peticiones por segundo
 rate(nginx_http_requests_total[1m])
 ```
 
-3. Hacer clic en **Execute** y luego en la pestaña **Graph** para ver la evolución en el tiempo
+## Flujo completo
 
-### Estructura actualizada del proyecto
+1. El usuario abre `http://localhost:8080`.
+2. NGINX entrega `frontend/index.html`.
+3. JavaScript llama a `/api/productos`.
+4. NGINX balancea esa peticion hacia uno de los tres backends.
+5. El backend valida la ruta y consulta MySQL mediante `mysql2/promise`.
+6. MySQL responde con los datos de `productos`.
+7. El backend devuelve JSON.
+8. El frontend renderiza tarjetas y actualiza contadores.
 
-```
-Telematicos_Proyecto/
-├── docker-compose.yml
-├── docker-compose.override.yml   # Recarga en caliente para desarrollo
-├── .env
-├── nginx/
-│   └── nginx.conf
-├── backends/
-│   ├── app1/ → app3/
-├── artillery/
-│   └── load-test.yml
-└── prometheus/
-    └── prometheus.yml            # Configuración de Prometheus
-```
-
----
-
-## Entorno de desarrollo — recarga en caliente
-
-El archivo `docker-compose.override.yml` se aplica automáticamente junto con el `docker-compose.yml`. Esto permite modificar el `nginx.conf` o cualquier `index.js` de los backends y ver los cambios sin reconstruir las imágenes.
-
-Para recargar NGINX después de editar `nginx.conf`:
-
-```bash
-docker restart load-balancer
-```
-
-Para recargar un backend después de editar su `index.js`:
-
-```bash
-docker restart backend-1   # o backend-2 / backend-3
-```
+Para crear, editar o eliminar, el flujo es igual, pero usando `POST`, `PUT` o `DELETE`. Despues de una accion exitosa, el frontend vuelve a consultar la lista para mostrar el estado real guardado en MySQL.

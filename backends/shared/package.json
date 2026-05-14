@@ -1,0 +1,12 @@
+{
+  "name": "inventario-productos-backend",
+  "version": "1.0.0",
+  "description": "API REST para inventario de productos tecnologicos",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.5"
+  }
+}

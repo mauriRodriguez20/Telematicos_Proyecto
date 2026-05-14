@@ -1,21 +1,5 @@
-# Este archivo se aplica automáticamente sobre docker-compose.yml en desarrollo.
-# Permite recarga en caliente de la configuración de NGINX sin reconstruir imágenes.
-
 services:
   nginx:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    environment:
-      - NGINX_ENVSUBST_TEMPLATE_SUFFIX=.conf
-
-  backend1:
-    volumes:
-      - ./backends/app1/index.js:/app/index.js:ro
-
-  backend2:
-    volumes:
-      - ./backends/app2/index.js:/app/index.js:ro
-
-  backend3:
-    volumes:
-      - ./backends/app3/index.js:/app/index.js:ro
+      - ./frontend:/usr/share/nginx/html:ro

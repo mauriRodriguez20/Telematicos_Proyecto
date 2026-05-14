@@ -1,5 +1,7 @@
 FROM node:18-alpine
 WORKDIR /app
-COPY index.js .
+COPY shared/package*.json ./
+RUN npm install --omit=dev
+COPY shared/ ./
 EXPOSE 3000
-CMD ["node", "index.js"]
+CMD ["npm", "start"]
